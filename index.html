@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@100..900&display=swap" rel="stylesheet">
+  <title>カタカナ造語（超シンプル）</title>
+  <style>
+    :root { 
+      color-scheme: light dark; 
+    }
+    body { 
+      margin-top: 80px; font-size: 5rem; font-family: "Murecho", sans-serif;
+      font-optical-sizing: auto;
+      font-weight: 500;
+      font-style: normal;
+      background: #e8e5df;
+      }
+    .controls { margin-bottom: 12px; }
+      .list { display: block; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 50px; }
+    .card { 
+      padding: 0; margin: 20px; 
+      text-align: center; 
+      color: #4d3420;
+    }
+    button { 
+      cursor: pointer;
+      font-size: 3rem;
+      display: block;
+      margin: 100px auto 0;
+      width: 40%;
+      padding: .1em;
+      border: none;
+      border-bottom: solid 5px #462000;
+      border-radius: 5px;
+      background-color: #76502d;
+      color: #fff;
+      font-weight: 600;
+      transition: .5s ease;
+    }
+  </style>
+</head>
+<body>
+  <div id="list" class="list" aria-live="polite"></div>
+  <div class="controls"><button id="regen">再生成</button></div>
+
+  <script>
+    // ===== シンプルな5段階重み =====
+    // 5:とてもよく出る / 4:よく出る / 3:ふつう / 2:やや少ない / 1:まれ
+    // ※ “キャ”等の拗音ユニットも1モーラとしてここに含める。
+    const BUCKETS = {
+      5: [
+        'ア','イ','ウ','エ','オ',
+        'カ','サ','タ','ナ','ハ','マ','ヤ','ラ','ワ',
+        'ン','ル','ス','ト'
+      ],
+      4: [
+        'リ','ラ','ク','ロ','レ','コ','テ','プ','ド','ジ','フ','メ',
+        'シ','チ','ツ','ム','マ'
+      ],
+      3: [
+        // 拗音（Y系）
+        'キャ','キュ','キョ','ギャ','ギュ','ギョ',
+        'シャ','シュ','ショ','ジャ','ジュ','ジョ',
+        'チャ','チュ','チョ','ニャ','ニュ','ニョ',
+    
+        // 単音（中頻度）
+        'キ','ク','ケ','ガ','グ','ゲ','ゴ','ゼ','デ','ベ','ボ','パ','ポ','ホ','ヒ','ヘ','ミ','ネ','ノ','ソ'
+      ],
+      2: [
+        'トゥ','ドゥ','チェ','ジェ','シェ',
+        'ザ','ギ','ョ','ュ','ャ', // 小書き単独は使わないが一応含めず候補から弾く
+        'ピ','ビ','ブ','ベ','ヤ','ユ','ヨ','ヌ','モ',
+        'ヒャ','ヒュ','ヒョ','ビャ','ビュ','ビョ','ピャ','ピュ','ピョ',
+        'ミャ','ミュ','ミョ','リャ','リュ','リョ',
+        // 外来語系（F/T/D/V系）
+        'ファ','フィ','フェ','フォ','フュ','ティ','ディ'
+      ],
+      1: [
+        // “ツ＋小母音”は目立ち過ぎ防止で超低頻度
+        'ツァ','ツィ','ツェ','ツォ',
+        // 促音
+        'ッ'
+      ]
+    };
+
+    // 語頭に置かない集合（仕様の最低条件）
+    const START_FORBIDDEN = new Set(['ッ','ン','ー','ャ','ュ','ョ','ァ','ィ','ゥ','ェ','ォ']);
+
+    // 語末では避けたい（見た目の違和感軽減；シンプルに）
+    const END_FORBIDDEN = new Set(['ッ','ャ','ュ','ョ','ァ','ィ','ゥ','ェ','ォ']);
+
+    // 1モーラの「単位（ユニット）」配列を作る：{u, w}
+    const UNITS = (() => {
+      const arr = [];
+      for (const [wStr, list] of Object.entries(BUCKETS)) {
+        const w = Number(wStr);
+        for (const u of list) {
+          // 小書き単独は候補に入れない（拗音はユニットで用意済み）
+          if (['ャ','ュ','ョ','ァ','ィ','ゥ','ェ','ォ'].includes(u)) continue;
+          arr.push({ u, w });
+        }
+      }
+      return arr;
+    })();
+
+    // 重み付きから1ユニット選択（超シンプル：累積方式）
+    function pickUnit(candidates) {
+      let sum = 0;
+      for (const c of candidates) sum += c.w;
+      if (sum <= 0) return null;
+      let r = Math.random() * sum;
+      for (const c of candidates) {
+        r -= c.w;
+        if (r <= 0) return c.u;
+      }
+      return candidates[candidates.length - 1].u;
+    }
+
+    // 次ユニット候補をざっくり作る
+    function nextCandidates(prevUnit, atStart, willEnd) {
+      return UNITS.filter(({u}) => {
+        // 語頭禁止（仕様）
+        if (atStart && START_FORBIDDEN.has(u)) return false;
+
+        // 語末の見た目ケア（超シンプル）
+        if (willEnd && END_FORBIDDEN.has(u)) return false;
+
+        // 促音の直後に母音っぽいものを避ける（最低限）
+        if (prevUnit === 'ッ' && /^[アイウエオャュョァィゥェォ]$/.test(u)) return false;
+
+        // ンの直後に「ヤ/ユ/ヨ」始まりは避ける（最低限）
+        if (prevUnit === 'ン' && ['ヤ','ユ','ヨ'].includes(u)) return false;
+
+        return true;
+      });
+    }
+
+    // 1語生成（モーラ長3〜8固定・ユニット数でカウント）
+    function generateWord() {
+      const weights = "33333344445567".split("").map(Number);
+      const target = weights[Math.floor(Math.random() * weights.length)];
+      const maxTries = 200;
+
+      for (let t = 0; t < maxTries; t++) {
+        const units = [];
+        while (units.length < target) {
+          const prev = units[units.length - 1] || '';
+          const atStart = units.length === 0;
+          const willEnd = units.length + 1 === target;
+          const cand = nextCandidates(prev, atStart, willEnd);
+          if (cand.length === 0) break;
+          const u = pickUnit(cand);
+          if (!u) break;
+          units.push(u);
+        }
+        if (units.length === target) {
+          const last = units[units.length - 1];
+          if (!END_FORBIDDEN.has(last)) return units.join('');
+        }
+      }
+      // フォールバック（滅多に来ない）
+      return 'カナ' + Math.floor(Math.random() * 1000);
+    }
+
+    // 10語を作って表示（固定）
+    function render() {
+      const words = Array.from({ length: 10 }, generateWord);
+      document.getElementById('list').innerHTML =
+        words.map(w => `<div class="card">${w}</div>`).join('');
+    }
+
+    document.getElementById('regen').addEventListener('click', render);
+    render();
+  </script>
+</body>
+</html>
