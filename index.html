@@ -6,30 +6,35 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@100..900&display=swap" rel="stylesheet">
-  <title>カタカナ造語（超シンプル）</title>
+  <link rel="icon" href="favicon.ico">
+  <title>ワード生成</title>
   <style>
     :root { 
       color-scheme: light dark; 
     }
     body { 
-      margin-top: 80px; font-size: 5rem; font-family: "Murecho", sans-serif;
+      margin: 0; padding:0;
+      font-size: 30px; font-family: "Murecho", sans-serif;
       font-optical-sizing: auto;
       font-weight: 500;
       font-style: normal;
-      background: #e8e5df;
+      background-image: url('back.jpg');;
       }
-    .controls { margin-bottom: 12px; }
-      .list { display: block; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 50px; }
+    .controls { margin-bottom: 5px; }
+    .list { 
+      display: block; 
+      margin-top:20px;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 30px; }
     .card { 
-      padding: 0; margin: 20px; 
+      padding: 0; margin: 10px; 
       text-align: center; 
       color: #4d3420;
     }
     button { 
       cursor: pointer;
-      font-size: 3rem;
+      font-size: 30px;
       display: block;
-      margin: 100px auto 0;
+      margin: 40px auto 0;
       width: 40%;
       padding: .1em;
       border: none;
